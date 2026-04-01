@@ -1,6 +1,5 @@
 import streamlit as st
 import yfinance as yf
-import pandas as pd
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -17,18 +16,20 @@ st.caption("Stock forecasts • iPhone friendly • Beginner safe")
 ticker = st.text_input("Type a ticker (example: NVDA or BTC-USD)", "NVDA").upper().strip()
 
 if ticker:
-    data = yf.download(ticker, period="6mo", interval="1d", progress=False)
+    with st.spinner("Loading data..."):
+        data = yf.download(ticker, period="6mo", interval="1d", progress=False)
     
     if not data.empty and "Close" in data.columns:
         current_price = float(data["Close"].iloc[-1])
         st.metric("Current Price", f"${current_price:.2f}")
         
         st.success("Forecast example: +2.8% over next 1-5 days (live data updates)")
-        st.info("Stop: $XXX | Target: $XXX | Risk: 1% of your account (safe default)")
+        st.info("Stop: $XXX | Target: $XXX | Risk: 1% of your account (safe for beginners)")
         
         if st.button("Add to Watchlist"):
             st.success(f"✅ {ticker} added to watchlist!")
     else:
-        st.error(f"Could not load data for {ticker}. Try another ticker like NVDA.")
+        st.error(f"Could not load data for **{ticker}**. Try NVDA, MSFT, or BTC-USD.")
+        st.info("Tip: yfinance sometimes needs a moment to load on the cloud.")
 else:
-    st.info("Enter a ticker above to see price and forecast.")
+    st.info("Enter a ticker above to see the price and forecast.")
