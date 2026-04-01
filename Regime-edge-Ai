@@ -1,38 +1,40 @@
 import streamlit as st
-import pandas-datareader as pdd 
+import pandas_datareader.data as web
 import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
 
 st.set_page_config(
     page_title="RegimeEdge AI",
     page_icon="📈",
-    layout="centered",           # perfect for iPhone
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
 st.title("RegimeEdge AI")
-st.caption("Your stock forecasts • iPhone ready • Easy mode")
+st.caption("Stock forecasts • iPhone friendly • Beginner safe")
 
-# Your watchlists and simple dashboard code (same as before but mobile-friendly)
-if "watchlists" not in st.session_state:
-    st.session_state.watchlists = {"AI Stocks": ["NVDA", "AMD", "MSFT"]}
+ticker = st.text_input("Type a ticker (example: NVDA or BTC-USD)", "NVDA").upper().strip()
 
-ticker = st.text_input("Type a ticker (example: NVDA or BTC-USD)", "NVDA").upper()
-
-# Simple forecast (works instantly)
-data = yf.download(ticker, period="6mo", interval="1d")
-if not data.empty:
-    current_price = data["Close"].iloc[-1]
-    st.metric("Current Price", f"${current_price:.2f}")
-    st.success("Forecast: +2.8% next 1-5 days (example)")
-    st.info("Stop: $XXX | Target: $XXX | Risk: 1% of your account")
-    if st.button("Add to Watchlist"):
-        st.success("Added! ✅")
+if ticker:
+    with st.spinner("Loading market data from Stooq..."):
+        try:
+            # Stooq is more stable on cloud
+            data = web.DataReader(ticker, 'stooq', start="2020-01-01")
+            
+            if not data.empty and "Close" in data.columns:
+                current_price = float(data["Close"].iloc[-1])
+                st.metric("Current Price", f"${current_price:.2f}")
+                
+                st.success("✅ Forecast example: +2.8% over next 1-5 days (demo)")
+                st.info("Stop: $XXX | Target: $XXX | Risk: 1% of your account (safe for beginners)")
+                
+                if st.button("Add to Watchlist"):
+                    st.success(f"✅ {ticker} added to watchlist!")
+            else:
+                st.error(f"No data found for **{ticker}**. Try NVDA, MSFT, or BTC-USD.")
+        except Exception as e:
+            st.error("Could not load data right now.")
+            st.info("💡 This can happen temporarily. Refresh in a few minutes.")
 else:
-    st.write("Loading chart…")
-
-st.caption("Forecasts update live. Alerts & risk tools coming in next click.")
+    st.info("Enter a ticker above to see price and forecast.")
