@@ -10,38 +10,52 @@ st.set_page_config(
 )
 
 st.title("RegimeEdge AI")
-st.caption("Multi-horizon forecasts • Risk management • iPhone ready")
+st.caption("Multi-horizon forecasts • Clear risk • iPhone ready")
+
+# Tabs for clean navigation
+tab1, tab2, tab3 = st.tabs(["Scan & Forecast", "Signal Card", "Strategy Lab"])
 
 # Persistent watchlist
 if "watchlist" not in st.session_state:
     st.session_state.watchlist = ["NVDA", "AMD", "MSFT", "BTC-USD"]
 
-ticker = st.text_input("Enter ticker (NVDA, BTC-USD, etc.)", "NVDA").upper().strip()
+ticker = st.text_input("Enter ticker", "NVDA").upper().strip()
 
-if ticker:
-    # Demo data
-    demo = {
-        "NVDA": {"price": 142.50, "forecast_1d": 2.1, "forecast_5d": 4.8, "confidence": 78},
-        "AMD": {"price": 118.75, "forecast_1d": 1.5, "forecast_5d": 3.9, "confidence": 65},
-        "MSFT": {"price": 428.30, "forecast_1d": 1.2, "forecast_5d": 2.8, "confidence": 82},
-        "BTC-USD": {"price": 68250.00, "forecast_1d": -2.3, "forecast_5d": 5.2, "confidence": 62},
-    }
-    
-    info = demo.get(ticker, {"price": 125.67, "forecast_1d": 2.0, "forecast_5d": 4.5, "confidence": 70})
-    
+# Demo data with regime
+demo = {
+    "NVDA": {"price": 142.50, "1d": 2.1, "5d": 4.8, "conf": 78, "regime": "Risk-On"},
+    "AMD": {"price": 118.75, "1d": 1.5, "5d": 3.9, "conf": 65, "regime": "High-Vol"},
+    "MSFT": {"price": 428.30, "1d": 1.2, "5d": 2.8, "conf": 82, "regime": "Risk-On"},
+    "BTC-USD": {"price": 68250.00, "1d": -2.3, "5d": 5.2, "conf": 62, "regime": "High-Vol"},
+}
+
+info = demo.get(ticker, {"price": 125.67, "1d": 2.0, "5d": 4.5, "conf": 70, "regime": "Risk-On"})
+
+with tab1:  # Scan & Forecast
     st.metric("Current Price (Demo)", f"${info['price']:,.2f}")
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("1 Day Forecast", f"+{info['forecast_1d']}%")
+        st.metric("1 Day", f"+{info['1d']}%")
     with col2:
-        st.metric("1-5 Day Forecast", f"+{info['forecast_5d']}%")
+        st.metric("1-5 Days", f"+{info['5d']}%")
     with col3:
-        st.metric("Confidence", f"{info['confidence']}%")
+        st.metric("Confidence", f"{info['conf']}%")
     
-    # Clean Signal Card
+    st.write(f"**Market Regime**: {info['regime']}")
+    
+    # Simple news sentiment
+    sentiment = 1.8 if info['5d'] > 0 else -0.9
+    st.write(f"**News Momentum**: {sentiment:+.1f} (positive = bullish)")
+    
+    if st.button("Add to Watchlist"):
+        if ticker not in st.session_state.watchlist:
+            st.session_state.watchlist.append(ticker)
+            st.success(f"✅ {ticker} added")
+
+with tab2:  # Signal Card
     st.subheader("Signal Card")
-    direction = "BUY" if info['forecast_5d'] > 0 else "SELL / HOLD"
+    direction = "BUY" if info['5d'] > 0 else "SELL / HOLD"
     st.success(f"**{direction} {ticker}**")
     
     stop_price = round(info['price'] * 0.92, 2)
@@ -49,44 +63,38 @@ if ticker:
     
     st.info(f"""
     **Entry**: ${info['price']:,.2f}  
-    **Stop Loss**: ${stop_price:,.2f}  
-    **Target**: ${target_price:,.2f}  
-    **Expected Move**: ±{abs(info['forecast_5d'])}% over 1–5 days
-    **Confidence**: {info['confidence']}%
+    **Stop Loss**: ${stop_price:,.2f} (8% below entry)  
+    **Target**: ${target_price:,.2f} (15% upside)  
+    **Expected Move**: ±{abs(info['5d'])}% over 1–5 days  
+    **Confidence**: {info['conf']}%
     """)
     
-    # Clean position sizing
+    # Position sizing
     st.subheader("Position Sizing")
     account_size = st.number_input("Account size ($)", value=10000, step=1000)
-    risk_percent = st.slider("Maximum risk per trade (%)", 0.5, 5.0, 1.0)
+    risk_percent = st.slider("Max risk per trade (%)", 0.5, 5.0, 1.0)
     
     risk_amount = account_size * (risk_percent / 100)
-    stop_distance = info['price'] * 0.08  # 8% stop distance
-    
+    stop_distance = info['price'] * 0.08
     shares = int(risk_amount / stop_distance) if stop_distance > 0 else 0
     
     st.write(f"**Recommended shares**: **{shares}**")
-    st.write(f"Risk amount: **${risk_amount:,.0f}** ({risk_percent}% of account)")
-    st.caption("This keeps risk controlled per trade.")
+    st.write(f"**Risk amount**: **${risk_amount:,.0f}** ({risk_percent}% of account)")
 
-    # Watchlist buttons
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Add to Watchlist"):
-            if ticker not in st.session_state.watchlist:
-                st.session_state.watchlist.append(ticker)
-                st.success(f"✅ {ticker} added")
-    with col2:
-        if st.button("Clear Watchlist"):
-            st.session_state.watchlist = []
-            st.success("Watchlist cleared")
+with tab3:  # Strategy Lab (placeholder)
+    st.subheader("Strategy Lab")
+    st.write("Build or tune strategies here (coming soon)")
+    st.write("- Trend following")
+    st.write("- Post-earnings drift")
+    st.write("- Volatility compression")
+    st.write("Backtest with regime filters • Risk overlays")
 
-# Watchlist display
+# Watchlist (visible on all tabs)
 st.subheader("My Watchlist")
 if st.session_state.watchlist:
     for t in st.session_state.watchlist:
         st.write(f"• {t}")
 else:
-    st.write("Watchlist is empty")
+    st.write("Empty")
 
-st.caption("Demo mode • Real data, regime detection, and news sentiment coming next • Not financial advice")
+st.caption("Demo mode • Real data + full news scoring + backtesting coming next • Not financial advice")
