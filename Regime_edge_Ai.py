@@ -1,7 +1,6 @@
+
 import streamlit as st
-import yfinance as yf
-import time
-from datetime import datetime
+import requests
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -15,7 +14,10 @@ st.set_page_config(
 st.title("RegimeEdge AI")
 st.caption("Live multi-horizon forecasts • Clear risk • iPhone ready")
 
-# Tabs
+# Your Finnhub API key (already inserted)
+FINNHUB_API_KEY = "d78i399r01qp0fl5ah30d78i399r01qp0fl5ah3g"
+
+# Tabs for navigation
 tab1, tab2, tab3 = st.tabs(["Scan & Forecast", "Signal Card", "My Watchlist"])
 
 if "watchlist" not in st.session_state:
@@ -23,24 +25,28 @@ if "watchlist" not in st.session_state:
 
 ticker = st.text_input("Enter ticker (NVDA, BTC-USD, etc.)", "NVDA").upper().strip()
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes to reduce calls
-def get_price_data(ticker):
+@st.cache_data(ttl=60)  # Cache for 60 seconds to stay under free tier limits
+def get_live_price(symbol):
     try:
-        data = yf.download(ticker, period="6mo", interval="1d", progress=False, timeout=15)
-        if not data.empty and "Close" in data.columns:
-            return float(data["Close"].iloc[-1])
+        url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            price = data.get("c")  # current price
+            if price and price > 0:
+                return price
         return None
     except:
         return None
 
 if ticker:
-    with st.spinner("Fetching live price..."):
-        current_price = get_price_data(ticker)
+    with st.spinner("Fetching live price from Finnhub..."):
+        current_price = get_live_price(ticker)
         
         if current_price:
             st.metric("Current Live Price", f"${current_price:,.2f}")
             
-            # Demo forecasts (replace with real model later)
+            # Demo forecasts (replace with real models later)
             forecast_1d = 1.8
             forecast_5d = 4.2
             confidence = 72
@@ -65,7 +71,7 @@ if ticker:
                 **Confidence**: {confidence}%
                 """)
                 
-                # Position sizing
+                # Clean position sizing
                 account = st.number_input("Account size ($)", value=10000, step=1000)
                 risk_pct = st.slider("Max risk per trade (%)", 0.5, 5.0, 1.0)
                 risk_amount = account * risk_pct / 100
@@ -74,13 +80,13 @@ if ticker:
                 st.write(f"**Recommended shares**: **{shares}**")
                 st.write(f"**Risk amount**: **${risk_amount:,.0f}**")
         else:
-            st.error("Could not fetch live data right now (Yahoo rate limit). Wait 15–30 min and refresh, or we'll switch to Finnhub.")
+            st.error("Could not fetch price. Make sure the ticker is valid (try NVDA or BTC-USD).")
 else:
-    st.info("Enter a ticker to see live price + forecasts.")
+    st.info("Enter a ticker above to load live data.")
 
 with tab3:
     st.subheader("My Watchlist")
     for t in st.session_state.watchlist:
         st.write(f"• {t}")
 
-st.caption("Live mode (yfinance) • Real regime + news coming next • Not financial advice")
+st.caption("Live prices via Finnhub • Next: regime detection + news sentiment • Not financial advice")
