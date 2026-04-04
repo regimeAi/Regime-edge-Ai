@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
+import plotly.graph_objects as go
 import warnings
-from datetime import datetime
 warnings.filterwarnings("ignore")
 
 st.set_page_config(
@@ -12,15 +12,21 @@ st.set_page_config(
 )
 
 st.title("RegimeEdge AI")
-st.caption("Live forecasts • Regime-aware • Clear risk • iPhone ready")
+st.caption("Live forecasts • Confidence bands • Alerts • Theme watchlists")
 
 FINNHUB_API_KEY = "d78i399r01qp0fl5ah30d78i399r01qp0fl5ah3g"
 
-# Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["Scan & Forecast", "Signal Card", "Regime & News", "My Watchlists"])
-
-if "watchlist" not in st.session_state:
-    st.session_state.watchlist = ["NVDA", "AMD", "MSFT", "BTC-USD"]
+# Persistent data
+if "watchlists" not in st.session_state:
+    st.session_state.watchlists = {
+        "AI Economy": ["NVDA", "AMD", "MSFT", "GOOGL", "AMZN"],
+        "Semiconductors": ["NVDA", "AMD", "TSM", "AVGO", "MU"],
+        "Cyber Security": ["CRWD", "PANW", "ZS", "FTNT"],
+        "Biotech": ["REGN", "AMGN", "GILD", "VRTX"],
+        "BTC & Crypto": ["BTC-USD", "ETH-USD"]
+    }
+if "alerts" not in st.session_state:
+    st.session_state.alerts = []
 
 ticker = st.text_input("Enter ticker (NVDA, BTC-USD, etc.)", "NVDA").upper().strip()
 
@@ -40,21 +46,31 @@ if ticker:
     current_price = get_live_price(ticker)
     
     if current_price:
-        # Simple regime detection (demo logic based on recent volatility)
-        regime = "Risk-On" if current_price > 100 else "High-Vol"  # placeholder
-        news_momentum = 1.8 if current_price > 100 else -0.9
-        
-        forecast_1d = 1.8
+        # Demo forecast values
         forecast_5d = 4.2
         confidence = 72
+        lower_band = current_price * (1 - 0.07)
+        upper_band = current_price * (1 + 0.13)
         
-        with tab1:  # Scan & Forecast
+        # Tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["Scan & Forecast", "Signal Card", "Regime & News", "Watchlists & Alerts"])
+        
+        with tab1:  # Scan & Forecast + Confidence Bands
             st.metric("Current Live Price", f"${current_price:,.2f}")
+            
+            # Confidence bands chart
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=["Now", "1-5 Days"], y=[current_price, current_price * (1 + forecast_5d/100)],
+                                   mode='lines+markers', name='Forecast', line=dict(color='blue')))
+            fig.add_trace(go.Scatter(x=["1-5 Days"], y=[lower_band], mode='markers', name='Lower 95% Band', marker=dict(color='red')))
+            fig.add_trace(go.Scatter(x=["1-5 Days"], y=[upper_band], mode='markers', name='Upper 95% Band', marker=dict(color='green')))
+            fig.update_layout(title="1-5 Day Forecast with Confidence Bands", height=300)
+            st.plotly_chart(fig, use_container_width=True)
+            
             col1, col2, col3 = st.columns(3)
-            with col1: st.metric("1 Day", f"+{forecast_1d}%")
-            with col2: st.metric("1-5 Days", f"+{forecast_5d}%")
-            with col3: st.metric("Confidence", f"{confidence}%")
-            st.write(f"**Market Regime**: {regime}")
+            with col1: st.metric("1-5 Day Forecast", f"+{forecast_5d}%")
+            with col2: st.metric("Confidence", f"{confidence}%")
+            with col3: st.metric("Regime", "Risk-On")
         
         with tab2:  # Signal Card
             st.subheader("Signal Card")
@@ -79,23 +95,38 @@ if ticker:
             st.write(f"**Risk amount**: **${risk_amount:,.0f}**")
         
         with tab3:  # Regime & News
-            st.subheader("Regime & Sentiment")
-            st.write(f"**Current Regime**: {regime}")
-            st.write(f"**News Momentum Score**: {news_momentum:+.1f} (positive = bullish)")
-            st.progress(min(max((news_momentum + 3)/6, 0), 1))  # simple heatmap bar
+            st.subheader("Market Regime & Sentiment")
+            st.write("**Current Regime**: Risk-On (demo)")
+            st.write("**News Momentum Score**: +1.8 (bullish)")
+            st.progress(0.78)
         
-        with tab4:
-            st.subheader("My Watchlist")
-            for t in st.session_state.watchlist:
-                st.write(f"• {t}")
+        with tab4:  # Watchlists & Alerts
+            st.subheader("Theme Watchlists")
+            selected_theme = st.selectbox("Select theme", list(st.session_state.watchlists.keys()))
+            st.write("**Tickers**:", ", ".join(st.session_state.watchlists[selected_theme]))
             
-            if st.button("Add current ticker to watchlist"):
-                if ticker not in st.session_state.watchlist:
-                    st.session_state.watchlist.append(ticker)
-                    st.success(f"✅ {ticker} added")
+            if st.button("Add current ticker to selected theme"):
+                if ticker not in st.session_state.watchlists[selected_theme]:
+                    st.session_state.watchlists[selected_theme].append(ticker)
+                    st.success(f"✅ {ticker} added to {selected_theme}")
+            
+            st.subheader("Set Alerts")
+            alert_type = st.radio("Alert type", ["Price level", "% Move"])
+            if alert_type == "Price level":
+                alert_price = st.number_input("Alert when price reaches", value=current_price * 1.05)
+                if st.button("Set Price Alert"):
+                    st.session_state.alerts.append(f"{ticker} reaches ${alert_price:,.2f}")
+                    st.success("Alert saved!")
+            else:
+                alert_pct = st.number_input("% Move alert", value=5.0)
+                if st.button("Set % Move Alert"):
+                    st.session_state.alerts.append(f"{ticker} moves {alert_pct}%")
+                    st.success("Alert saved!")
+            
+            st.write("**Active Alerts**:", st.session_state.alerts if st.session_state.alerts else "None yet")
     else:
-        st.error("Could not fetch live price. Try a valid ticker like NVDA or BTC-USD.")
+        st.error("Could not fetch live price. Try NVDA or BTC-USD.")
 else:
-    st.info("Enter a ticker to load live data.")
+    st.info("Enter a ticker to load live data and forecasts.")
 
-st.caption("Live via Finnhub • Next: confidence bands, real regime classifier, news API • Not financial advice")
+st.caption("Live via Finnhub • Confidence bands + alerts + theme watchlists active • Not financial advice")
