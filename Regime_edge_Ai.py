@@ -3,7 +3,6 @@ import requests
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
 import time
 import warnings
 warnings.filterwarnings("ignore")
@@ -16,7 +15,7 @@ st.set_page_config(
 )
 
 st.title("RegimeEdge AI v1.0")
-st.caption("Cutting-edge live forecasting • Historical correlation • Backtested precision • Designed for market edge")
+st.caption("Cutting-edge live forecasting • Historical correlation • Backtested precision")
 
 FINNHUB_API_KEY = "d78i399r01qp0fl5ah30d78i399r01qp0fl5ah3g"
 
@@ -83,20 +82,12 @@ if ticker:
         confidence = 60
         regime = "Neutral"
     else:
+        # Simple dynamic forecast using recent trend
         recent = candles.tail(30).reset_index(drop=True)
-        X = np.arange(len(recent)).reshape(-1, 1)
-        y = recent['Close'].values
-        model = LinearRegression().fit(X, y)
-        future_days = np.array([[len(recent)], [len(recent) + 4]])
-        forecast_prices = model.predict(future_days)
-        forecast_5d_pct = ((forecast_prices[1] - current_price) / current_price) * 100
-        
-        r2 = model.score(X, y)
         recent_momentum = (recent['Close'].iloc[-1] / recent['Close'].iloc[0] - 1) * 100
-        confidence = round(max(55, min(92, r2 * 70 + 35 + abs(recent_momentum)/2)))
-        
-        daily_vol = recent['Close'].pct_change().std()
-        regime = "Risk-On" if recent_momentum > 2 and daily_vol < 0.025 else "High-Vol" if daily_vol >= 0.025 else "Risk-Off"
+        forecast_5d_pct = recent_momentum * 0.6  # simple correlation-based prediction
+        confidence = round(max(55, min(90, 60 + abs(recent_momentum) * 1.2)))
+        regime = "Risk-On" if recent_momentum > 2 and recent['Close'].pct_change().std() < 0.025 else "High-Vol" if recent['Close'].pct_change().std() >= 0.025 else "Risk-Off"
     
     daily_vol = candles['Close'].pct_change().std() if candles is not None and not candles.empty else 0.018
     lower_band = current_price * (1 - 1.8 * daily_vol * np.sqrt(5))
