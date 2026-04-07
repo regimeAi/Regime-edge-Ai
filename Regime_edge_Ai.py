@@ -19,8 +19,6 @@ st.caption(“Cutting-edge live forecasting • Historical correlation • Backt
 
 FINNHUB_API_KEY = “d78i399r01qp0fl5ah30d78i399r01qp0fl5ah3g”
 
-# ── Persistent session state ──────────────────────────────────────────────────
-
 if “watchlists” not in st.session_state:
 st.session_state.watchlists = {
 “AI Economy”:     [“NVDA”, “AMD”, “MSFT”, “GOOGL”, “AMZN”],
@@ -37,81 +35,49 @@ ticker = st.text_input(
 “Enter ticker (NVDA, BTC-USD, ^GSPC for S&P 500, ^IXIC for NASDAQ)”, “NVDA”
 ).upper().strip()
 
-# ── Data helpers ──────────────────────────────────────────────────────────────
-
 @st.cache_data(ttl=10, show_spinner=False)
-def get_live_price(symbol: str):
-“””
-FIX 1: Added explicit float() cast on return values so callers always
-get a plain Python float, not a numpy scalar or single-element Series.
-“””
+def get_live_price(symbol):
 if not symbol:
 return None
-
-```
-# Primary: Finnhub
 try:
-    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    price = resp.json().get("c")
-    if price and float(price) > 0:
-        return float(price)
+url = f”https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}”
+resp = requests.get(url, timeout=10)
+resp.raise_for_status()
+price = resp.json().get(“c”)
+if price and float(price) > 0:
+return float(price)
 except Exception:
-    pass
-
-# Fallback: yfinance
+pass
 try:
-    data = yf.download(symbol, period="1d", interval="1m",
-                       progress=False, auto_adjust=True)
-    if not data.empty:
-        close = data["Close"]
-        # FIX 2: yfinance ≥0.2 returns MultiIndex columns → flatten to Series
-        if isinstance(close, pd.DataFrame):
-            close = close.iloc[:, 0]
-        return float(close.iloc[-1])
+data = yf.download(symbol, period=“1d”, interval=“1m”,
+progress=False, auto_adjust=True)
+if not data.empty:
+close = data[“Close”]
+if isinstance(close, pd.DataFrame):
+close = close.iloc[:, 0]
+return float(close.iloc[-1])
 except Exception:
-    pass
-
+pass
 return None
-```
 
 @st.cache_data(ttl=300, show_spinner=False)
-def get_candles(symbol: str):
-“””
-FIX 2 (main): yfinance ≥0.2 returns MultiIndex columns like (‘Close’,‘NVDA’).
-The original rename() silently did nothing, so downstream column lookups
-failed with KeyError. Now we flatten columns before selecting.
-
-```
-FIX 3: Added pd.to_numeric + dropna so stale NaN rows don't break
-std(), mean(), or candlestick charts.
-"""
+def get_candles(symbol):
 if not symbol:
-    return None
+return None
 try:
-    data = yf.download(symbol, period="1y", interval="1d",
-                       progress=False, auto_adjust=True)
-    if data.empty:
-        return None
-
-    # Flatten MultiIndex columns if present
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
-
-    df = data.reset_index()[["Date", "Open", "High", "Low", "Close"]].copy()
-
-    # Coerce to numeric and drop bad rows
-    for col in ["Open", "High", "Low", "Close"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna().reset_index(drop=True)
-
-    return df
+data = yf.download(symbol, period=“1y”, interval=“1d”,
+progress=False, auto_adjust=True)
+if data.empty:
+return None
+if isinstance(data.columns, pd.MultiIndex):
+data.columns = data.columns.get_level_values(0)
+df = data.reset_index()[[“Date”, “Open”, “High”, “Low”, “Close”]].copy()
+for col in [“Open”, “High”, “Low”, “Close”]:
+df[col] = pd.to_numeric(df[col], errors=“coerce”)
+df = df.dropna().reset_index(drop=True)
+return df
 except Exception:
-    return None
-```
-
-# ── Main app ──────────────────────────────────────────────────────────────────
+return None
 
 if ticker:
 current_price = get_live_price(ticker)
@@ -122,35 +88,26 @@ if current_price is None:
     st.error("Live price fetch failed. Try again in a few seconds or use a major ticker.")
     st.stop()
 
-# FIX 4: Use a single boolean guard for all data-dependent logic.
-# The original code checked `candles.empty` in multiple places AFTER an
-# earlier check of `candles is None`, but later tab2/tab3 code called
-# `candles.empty` without a None guard → AttributeError when candles=None.
 has_data = (candles is not None) and (not candles.empty) and (len(candles) >= 30)
 
 if not has_data:
     st.warning("Limited historical data. Showing basic forecast.")
     forecast_5d_pct = 2.5
-    confidence     = 60
-    regime         = "Neutral"
-    daily_vol      = 0.018
+    confidence = 60
+    regime = "Neutral"
+    daily_vol = 0.018
 else:
-    recent       = candles.tail(30).reset_index(drop=True)
-    # FIX 5: Wrap iloc values in float() to avoid Series arithmetic when
-    # yfinance returns a DataFrame column instead of a plain Series.
-    close_start  = float(recent["Close"].iloc[0])
-    close_end    = float(recent["Close"].iloc[-1])
-    recent_momentum  = (close_end / close_start - 1) * 100
-    forecast_5d_pct  = float(recent_momentum * 0.65)
-    confidence       = int(round(max(55, min(92, 60 + abs(recent_momentum) * 1.2))))
-
+    recent = candles.tail(30).reset_index(drop=True)
+    close_start = float(recent["Close"].iloc[0])
+    close_end = float(recent["Close"].iloc[-1])
+    recent_momentum = (close_end / close_start - 1) * 100
+    forecast_5d_pct = float(recent_momentum * 0.65)
+    confidence = int(round(max(55, min(92, 60 + abs(recent_momentum) * 1.2))))
     daily_vol = float(recent["Close"].pct_change().std())
-    # FIX 6: Guard against NaN/zero daily_vol (e.g. weekend-only data gaps)
     if not np.isfinite(daily_vol) or daily_vol == 0:
         daily_vol = 0.018
-
     regime = (
-        "Risk-On"  if recent_momentum > 2 and daily_vol < 0.025 else
+        "Risk-On" if recent_momentum > 2 and daily_vol < 0.025 else
         "High-Vol" if daily_vol >= 0.025 else
         "Risk-Off"
     )
@@ -162,7 +119,6 @@ tab1, tab2, tab3, tab4 = st.tabs(
     ["Scan & Forecast", "Signal Card", "Regime & News", "Strategy Lab & Backtest"]
 )
 
-# ── Tab 1: Scan & Forecast ────────────────────────────────────────────────
 with tab1:
     st.metric("Current Live Price", f"${current_price:,.2f}")
 
@@ -170,7 +126,7 @@ with tab1:
         fig_candle = go.Figure(data=[go.Candlestick(
             x=candles["Date"],
             open=candles["Open"], high=candles["High"],
-            low=candles["Low"],  close=candles["Close"]
+            low=candles["Low"], close=candles["Close"]
         )])
         fig_candle.update_layout(
             title="Last 365 Days Candlestick Chart",
@@ -181,9 +137,7 @@ with tab1:
     else:
         st.info("Candlestick chart will appear once more data loads.")
 
-    # FIX 7: Confidence bands chart anchored at current_price on BOTH
-    # ends so the lines actually draw from Now → 1-5 Days.
-    # Original had single-point x=["1-5 Days"] for bands → invisible dots.
+    sign = "+" if forecast_5d_pct >= 0 else ""
     forecast_target = current_price * (1 + forecast_5d_pct / 100)
     fig_band = go.Figure()
     fig_band.add_trace(go.Scatter(
@@ -209,79 +163,66 @@ with tab1:
     st.plotly_chart(fig_band, use_container_width=True)
 
     col1, col2, col3 = st.columns(3)
-    # FIX 8: Always show correct sign — original hardcoded "+" even for
-    # negative forecasts.
-    sign = "+" if forecast_5d_pct >= 0 else ""
     with col1: st.metric("1-5 Day Forecast", f"{sign}{forecast_5d_pct:.1f}%")
     with col2: st.metric("Confidence", f"{confidence}%")
     with col3: st.metric("Regime", regime)
 
-# ── Tab 2: Signal Card ────────────────────────────────────────────────────
 with tab2:
     st.subheader("Signal Card")
     direction = "BUY" if forecast_5d_pct > 0 else "SELL / HOLD"
     st.success(f"**{direction} {ticker}** – High-probability edge detected")
 
-    # FIX 9: ATR calculation guarded properly with has_data (not
-    # candles.empty which crashes when candles is None).
     if has_data and len(candles) > 14:
         atr = float((candles["High"] - candles["Low"]).tail(14).mean())
     else:
         atr = current_price * 0.02
 
-    stop_price   = round(current_price - 2 * atr, 2)
+    stop_price = round(current_price - 2 * atr, 2)
     target_price = round(current_price + 3 * atr, 2)
 
     st.info(f"""
     **Entry**: ${current_price:,.2f}  
     **ATR-based Stop Loss**: ${stop_price:,.2f}  
     **ATR-based Target**: ${target_price:,.2f}  
-    **Expected Move**: ±{abs(forecast_5d_pct):.1f}% over 1–5 days  
+    **Expected Move**: ±{abs(forecast_5d_pct):.1f}% over 1-5 days  
     **Confidence**: {confidence}%
     """)
 
-    account    = st.number_input("Account size ($)", value=10000, step=1000)
-    risk_pct   = st.slider("Max risk per trade (%)", 0.5, 5.0, 1.0)
+    account = st.number_input("Account size ($)", value=10000, step=1000)
+    risk_pct = st.slider("Max risk per trade (%)", 0.5, 5.0, 1.0)
     risk_amount = account * risk_pct / 100
-    stop_dist  = current_price - stop_price
-    shares     = int(risk_amount / stop_dist) if stop_dist > 0 else 0
+    stop_dist = current_price - stop_price
+    shares = int(risk_amount / stop_dist) if stop_dist > 0 else 0
     st.write(f"**Recommended shares**: **{shares}** (ATR-adjusted)")
     st.write(f"**Risk amount**: **${risk_amount:,.0f}**")
 
-# ── Tab 3: Regime & News ──────────────────────────────────────────────────
 with tab3:
     st.subheader("Regime & News Sentiment")
     label = "strong gains" if regime == "Risk-On" else "caution"
-    st.write(f"**Current Regime**: {regime} – favorable for {label}")
+    st.write(f"**Current Regime**: {regime} - favorable for {label}")
     st.write("**News Momentum**: Real-time scoring active")
     st.progress(0.78)
 
-# ── Tab 4: Strategy Lab & Backtest ────────────────────────────────────────
 with tab4:
     st.subheader("Strategy Lab & Backtest Validation")
-    st.write("**Historical Performance of Current Model** (last 60–90 days)")
+    st.write("**Historical Performance of Current Model** (last 60-90 days)")
 
     if st.button("Run Full Backtest on this Ticker"):
         if has_data:
-            # FIX 10: Replace the static fake result string with a real
-            # SMA-crossover backtest computed from actual price history.
             df_bt = candles.copy()
-            df_bt["SMA10"]       = df_bt["Close"].rolling(10).mean()
-            df_bt["SMA30"]       = df_bt["Close"].rolling(30).mean()
-            df_bt["Signal"]      = np.where(df_bt["SMA10"] > df_bt["SMA30"], 1, 0)
+            df_bt["SMA10"] = df_bt["Close"].rolling(10).mean()
+            df_bt["SMA30"] = df_bt["Close"].rolling(30).mean()
+            df_bt["Signal"] = np.where(df_bt["SMA10"] > df_bt["SMA30"], 1, 0)
             df_bt["DailyReturn"] = df_bt["Close"].pct_change()
             df_bt["StratReturn"] = df_bt["Signal"].shift(1) * df_bt["DailyReturn"]
             df_bt = df_bt.dropna()
-
             if len(df_bt) > 0:
-                trades    = df_bt[df_bt["StratReturn"] != 0]
-                win_rate  = (trades["StratReturn"] > 0).mean() * 100
-                avg_gain  = trades.loc[trades["StratReturn"] > 0, "StratReturn"].mean() * 100
+                trades = df_bt[df_bt["StratReturn"] != 0]
+                win_rate = (trades["StratReturn"] > 0).mean() * 100
+                avg_gain = trades.loc[trades["StratReturn"] > 0, "StratReturn"].mean() * 100
                 vol_strat = df_bt["StratReturn"].std()
-                sharpe    = (
-                    df_bt["StratReturn"].mean() / vol_strat * np.sqrt(252)
-                    if vol_strat > 0 else 0.0
-                )
+                sharpe = (df_bt["StratReturn"].mean() / vol_strat * np.sqrt(252)
+                          if vol_strat > 0 else 0.0)
                 st.success(
                     f"Backtest ({ticker}) — "
                     f"Win rate: **{win_rate:.0f}%** | "
@@ -289,7 +230,7 @@ with tab4:
                     f"Sharpe: **{sharpe:.2f}**"
                 )
             else:
-                st.warning("Not enough trades generated by the backtest model.")
+                st.warning("Not enough trades generated.")
         else:
             st.warning("Not enough historical data to run a backtest.")
 
@@ -299,11 +240,9 @@ with tab4:
     if st.button("Add current ticker to theme"):
         if ticker not in st.session_state.watchlists[selected_theme]:
             st.session_state.watchlists[selected_theme].append(ticker)
-            st.success(f"✅ Added {ticker} to {selected_theme}")
+            st.success(f"Added {ticker} to {selected_theme}")
 
     st.subheader("Alerts")
-    # FIX 11: Wrap default alert value in float() — original passed a
-    # numpy float64 which caused a Streamlit widget type error in some versions.
     alert_price = st.number_input(
         "Alert when price reaches",
         value=float(round(current_price * 1.05, 2)),
