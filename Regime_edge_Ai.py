@@ -4,8 +4,6 @@ import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-import warnings
-warnings.filterwarnings(“ignore”)
 
 st.set_page_config(
 page_title=“RegimeEdge AI v1.0”,
