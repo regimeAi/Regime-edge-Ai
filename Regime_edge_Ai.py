@@ -15,7 +15,7 @@ initial_sidebar_state=“collapsed”
 )
 
 st.title(“RegimeEdge AI v1.0”)
-st.caption(“Cutting-edge live forecasting • Historical correlation • Backtested precision”)
+st.caption(“Cutting-edge live forecasting - Historical correlation - Backtested precision”)
 
 FINNHUB_API_KEY = “d78i399r01qp0fl5ah30d78i399r01qp0fl5ah3g”
 
@@ -106,11 +106,12 @@ else:
     daily_vol = float(recent["Close"].pct_change().std())
     if not np.isfinite(daily_vol) or daily_vol == 0:
         daily_vol = 0.018
-    regime = (
-        "Risk-On" if recent_momentum > 2 and daily_vol < 0.025 else
-        "High-Vol" if daily_vol >= 0.025 else
-        "Risk-Off"
-    )
+    if recent_momentum > 2 and daily_vol < 0.025:
+        regime = "Risk-On"
+    elif daily_vol >= 0.025:
+        regime = "High-Vol"
+    else:
+        regime = "Risk-Off"
 
 lower_band = current_price * (1 - 1.8 * daily_vol * np.sqrt(5))
 upper_band = current_price * (1 + 1.8 * daily_vol * np.sqrt(5))
@@ -170,7 +171,7 @@ with tab1:
 with tab2:
     st.subheader("Signal Card")
     direction = "BUY" if forecast_5d_pct > 0 else "SELL / HOLD"
-    st.success(f"**{direction} {ticker}** – High-probability edge detected")
+    st.success(f"**{direction} {ticker}** - High-probability edge detected")
 
     if has_data and len(candles) > 14:
         atr = float((candles["High"] - candles["Low"]).tail(14).mean())
@@ -180,13 +181,13 @@ with tab2:
     stop_price = round(current_price - 2 * atr, 2)
     target_price = round(current_price + 3 * atr, 2)
 
-    st.info(f"""
-    **Entry**: ${current_price:,.2f}  
-    **ATR-based Stop Loss**: ${stop_price:,.2f}  
-    **ATR-based Target**: ${target_price:,.2f}  
-    **Expected Move**: ±{abs(forecast_5d_pct):.1f}% over 1-5 days  
-    **Confidence**: {confidence}%
-    """)
+    st.info(
+        f"**Entry**: ${current_price:,.2f}\n\n"
+        f"**ATR-based Stop Loss**: ${stop_price:,.2f}\n\n"
+        f"**ATR-based Target**: ${target_price:,.2f}\n\n"
+        f"**Expected Move**: +/-{abs(forecast_5d_pct):.1f}% over 1-5 days\n\n"
+        f"**Confidence**: {confidence}%"
+    )
 
     account = st.number_input("Account size ($)", value=10000, step=1000)
     risk_pct = st.slider("Max risk per trade (%)", 0.5, 5.0, 1.0)
@@ -224,7 +225,7 @@ with tab4:
                 sharpe = (df_bt["StratReturn"].mean() / vol_strat * np.sqrt(252)
                           if vol_strat > 0 else 0.0)
                 st.success(
-                    f"Backtest ({ticker}) — "
+                    f"Backtest ({ticker}) - "
                     f"Win rate: **{win_rate:.0f}%** | "
                     f"Avg winning trade: **+{avg_gain:.2f}%** | "
                     f"Sharpe: **{sharpe:.2f}**"
@@ -257,4 +258,4 @@ with tab4:
 else:
 st.info(“Enter a ticker (including ^GSPC or ^IXIC) above to load real-time dynamic forecasts.”)
 
-st.caption(“Version 1.0 • Hybrid live data • 365-day candlestick • 10-second refresh”)
+st.caption(“Version 1.0 - Hybrid live data - 365-day candlestick - 10-second refresh”)
