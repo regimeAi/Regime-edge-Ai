@@ -83,10 +83,10 @@ if ticker:
         daily_vol = 0.018
     else:
         recent = candles.tail(30).reset_index(drop=True)
-        recent_momentum = (recent['Close'].iloc[-1] / recent['Close'].iloc[0] - 1) * 100
+        recent_momentum = float(recent['Close'].iloc[-1] / recent['Close'].iloc[0] - 1) * 100
         forecast_5d_pct = recent_momentum * 0.65
         confidence = round(max(55, min(92, 60 + abs(recent_momentum) * 1.2)))
-        daily_vol = recent['Close'].pct_change().std() if len(recent) > 1 else 0.018
+        daily_vol = float(recent['Close'].pct_change().std()) if len(recent) > 1 else 0.018
         regime = "Risk-On" if recent_momentum > 2 and daily_vol < 0.025 else "High-Vol" if daily_vol >= 0.025 else "Risk-Off"
     
     lower_band = current_price * (1 - 1.8 * daily_vol * np.sqrt(5))
