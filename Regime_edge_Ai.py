@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import yfinance as yf
@@ -38,6 +39,7 @@ ticker = st.text_input("Enter ticker (NVDA, BTC-USD, ^GSPC for S&P 500, ^IXIC fo
 @st.cache_data(ttl=10, show_spinner=False)
 def get_live_price(symbol):
     if not symbol: return None
+    # Finnhub first (fast real-time)
     try:
         url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
         response = requests.get(url, timeout=10)
@@ -47,6 +49,7 @@ def get_live_price(symbol):
             return price
     except:
         pass
+    # Fallback to yfinance
     try:
         data = yf.download(symbol, period="1d", interval="1m", progress=False)
         if not data.empty:
@@ -73,7 +76,7 @@ if ticker:
     candles = get_candles(ticker)
     
     if current_price is None:
-        st.error("Live price fetch failed. Try again in a few seconds or use a major ticker like NVDA or ^GSPC.")
+        st.error("Live price fetch failed from both sources. Try again in a few seconds or use a major ticker.")
         st.stop()
     
     if candles is None or candles.empty or len(candles) < 30:
@@ -81,15 +84,15 @@ if ticker:
         forecast_5d_pct = 2.5
         confidence = 60
         regime = "Neutral"
-        daily_vol = 0.018
     else:
         recent = candles.tail(30).reset_index(drop=True)
         recent_momentum = (recent['Close'].iloc[-1] / recent['Close'].iloc[0] - 1) * 100
         forecast_5d_pct = recent_momentum * 0.65
         confidence = round(max(55, min(92, 60 + abs(recent_momentum) * 1.2)))
-        daily_vol = recent['Close'].pct_change().std() if len(recent) > 1 else 0.018
+        daily_vol = recent['Close'].pct_change().std()
         regime = "Risk-On" if recent_momentum > 2 and daily_vol < 0.025 else "High-Vol" if daily_vol >= 0.025 else "Risk-Off"
     
+    daily_vol = candles['Close'].pct_change().std() if not candles.empty else 0.018
     lower_band = current_price * (1 - 1.8 * daily_vol * np.sqrt(5))
     upper_band = current_price * (1 + 1.8 * daily_vol * np.sqrt(5))
     
