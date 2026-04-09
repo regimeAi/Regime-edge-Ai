@@ -168,3 +168,11 @@ if ticker:
         
         st.subheader("Alerts")
         alert_price = st.number_input("Alert when price reaches", value=current_price * 1.05)
+        if st.button("Set Price Alert"):
+            st.session_state.alerts.append(f"{ticker} @ ${alert_price:,.2f}")
+            st.success("Alert saved!")
+        st.write("Active alerts:", st.session_state.alerts if st.session_state.alerts else "None")
+else:
+    st.info("Enter a ticker (including ^GSPC or ^IXIC) above to load real-time dynamic forecasts.")
+
+st.caption("Version 1.0 • Hybrid live data • 365-day candlestick • 10-second refresh")
